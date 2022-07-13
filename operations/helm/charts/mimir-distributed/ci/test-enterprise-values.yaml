@@ -20,6 +20,8 @@ ingester:
   resources:
     requests:
       cpu: 10m
+  podDisruptionBudget:
+    maxUnavailable: 1
 
 store_gateway:
   persistentVolume:
