@@ -1,14 +1,14 @@
 ---
-# Source: mimir-distributed/templates/alertmanager/alertmanager-statefulset.yaml
+# Source: mimir-distributed/templates/compactor/compactor-statefulset.yaml
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: test-enterprise-values-mimir-alertmanager
+  name: test-enterprise-values-mimir-compactor
   labels:
     helm.sh/chart: mimir-distributed-2.2.0-weekly.192
     app.kubernetes.io/name: mimir
     app.kubernetes.io/instance: test-enterprise-values
-    app.kubernetes.io/component: alertmanager
+    app.kubernetes.io/component: compactor
     app.kubernetes.io/part-of: memberlist
     app.kubernetes.io/version: "2.1.0"
     app.kubernetes.io/managed-by: Helm
@@ -21,10 +21,10 @@ spec:
     matchLabels:
       app.kubernetes.io/name: mimir
       app.kubernetes.io/instance: test-enterprise-values
-      app.kubernetes.io/component: alertmanager
+      app.kubernetes.io/component: compactor
   updateStrategy:
     type: RollingUpdate
-  serviceName: test-enterprise-values-mimir-alertmanager
+  serviceName: test-enterprise-values-mimir-compactor
   template:
     metadata:
       labels:
@@ -33,7 +33,7 @@ spec:
         app.kubernetes.io/instance: test-enterprise-values
         app.kubernetes.io/version: "2.1.0"
         app.kubernetes.io/managed-by: Helm
-        app.kubernetes.io/component: alertmanager
+        app.kubernetes.io/component: compactor
         app.kubernetes.io/part-of: memberlist
       annotations:
         checksum/config: b24b6f0c949ab2e6c7f30817762604e634e0b2728f7864491689d2f1f3bafc02
@@ -47,10 +47,20 @@ spec:
       nodeSelector:
         {}
       affinity:
-        {}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: target
+                  operator: In
+                  values:
+                  - compactor
+              topologyKey: kubernetes.io/hostname
+            weight: 100
       tolerations:
         []
-      terminationGracePeriodSeconds: 60
+      terminationGracePeriodSeconds: 240
       volumes:
         - name: config
           secret:
@@ -63,14 +73,12 @@ spec:
             name: test-enterprise-values-mimir-runtime
         - name: storage
           emptyDir: {}
-        - name: tmp
-          emptyDir: {}
       containers:
-        - name: alertmanager
+        - name: compactor
           image: "grafana/enterprise-metrics:r191-708e13a1"
           imagePullPolicy: IfNotPresent
           args:
-            - "-target=alertmanager"
+            - "-target=compactor"
             - "-config.expand-env=true"
             - "-config.file=/etc/mimir/mimir.yaml"
           volumeMounts:
@@ -82,8 +90,6 @@ spec:
               mountPath: /var/mimir
             - name: storage
               mountPath: "/data"
-            - name: tmp
-              mountPath: /tmp
           ports:
             - name: http-metrics
               containerPort: 8080
@@ -100,11 +106,11 @@ spec:
             httpGet:
               path: /ready
               port: http-metrics
-            initialDelaySeconds: 45
+            initialDelaySeconds: 60
           resources:
             requests:
-              cpu: 10m
-              memory: 32Mi
+              cpu: 100m
+              memory: 512Mi
           securityContext:
             readOnlyRootFilesystem: true
           env:
