@@ -239,10 +239,10 @@ func (a *API) RegisterRuntimeConfig(runtimeConfigHandler http.HandlerFunc) {
 func (a *API) RegisterDistributor(d *distributor.Distributor, pushConfig distributor.Config) {
 	distributorpb.RegisterDistributorServer(a.server.GRPC, d)
 
-	wrappedDistributor := a.cfg.wrapDistributorPush(d)
+	wrappedDistributor := d.PrePushLimitsMiddleware(a.cfg.wrapDistributorPush(d))
 
-	a.RegisterRoute("/api/v1/push", d.PrePushLimitsHandler(push.Handler(pushConfig.MaxRecvMsgSize, a.sourceIPs, a.cfg.SkipLabelNameValidationHeader, wrappedDistributor)), true, false, "POST")
-	a.RegisterRoute("/otlp/v1/metrics", d.PrePushLimitsHandler(push.OTLPHandler(pushConfig.MaxRecvMsgSize, a.sourceIPs, a.cfg.SkipLabelNameValidationHeader, wrappedDistributor)), true, false, "POST")
+	a.RegisterRoute("/api/v1/push", push.Handler(pushConfig.MaxRecvMsgSize, a.sourceIPs, a.cfg.SkipLabelNameValidationHeader, wrappedDistributor), true, false, "POST")
+	a.RegisterRoute("/otlp/v1/metrics", push.OTLPHandler(pushConfig.MaxRecvMsgSize, a.sourceIPs, a.cfg.SkipLabelNameValidationHeader, wrappedDistributor), true, false, "POST")
 
 	a.indexPage.AddLinks(defaultWeight, "Distributor", []IndexPageLink{
 		{Desc: "Ring status", Path: "/distributor/ring"},
@@ -261,7 +261,7 @@ type Ingester interface {
 	client.IngesterServer
 	FlushHandler(http.ResponseWriter, *http.Request)
 	ShutdownHandler(http.ResponseWriter, *http.Request)
-	PushWithCleanup(context.Context, *mimirpb.WriteRequest, func()) (*mimirpb.WriteResponse, error)
+	PushWithCleanup(context.Context, *push.Request) (*mimirpb.WriteResponse, error)
 }
 
 // RegisterIngester registers the ingesters HTTP and GRPC service
