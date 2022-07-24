@@ -3143,6 +3143,8 @@ func (i *mockIngester) Close() error {
 }
 
 func (i *mockIngester) Push(ctx context.Context, req *mimirpb.WriteRequest, opts ...grpc.CallOption) (*mimirpb.WriteResponse, error) {
+	time.Sleep(i.responseDelay)
+
 	i.Lock()
 	defer i.Unlock()
 
@@ -3269,6 +3271,8 @@ func (i *mockIngester) QueryStream(ctx context.Context, req *client.QueryRequest
 }
 
 func (i *mockIngester) MetricsForLabelMatchers(ctx context.Context, req *client.MetricsForLabelMatchersRequest, opts ...grpc.CallOption) (*client.MetricsForLabelMatchersResponse, error) {
+	time.Sleep(i.responseDelay)
+
 	i.Lock()
 	defer i.Unlock()
 
@@ -3295,6 +3299,8 @@ func (i *mockIngester) MetricsForLabelMatchers(ctx context.Context, req *client.
 }
 
 func (i *mockIngester) LabelNames(ctx context.Context, req *client.LabelNamesRequest, opts ...grpc.CallOption) (*client.LabelNamesResponse, error) {
+	time.Sleep(i.responseDelay)
+
 	i.Lock()
 	defer i.Unlock()
 
@@ -3323,6 +3329,8 @@ func (i *mockIngester) LabelNames(ctx context.Context, req *client.LabelNamesReq
 }
 
 func (i *mockIngester) MetricsMetadata(ctx context.Context, req *client.MetricsMetadataRequest, opts ...grpc.CallOption) (*client.MetricsMetadataResponse, error) {
+	time.Sleep(i.responseDelay)
+
 	i.Lock()
 	defer i.Unlock()
 
@@ -3854,4 +3862,36 @@ func countMockIngestersCalls(ingesters []mockIngester, name string) int {
 		}
 	}
 	return count
+}
+
+func TestDistributor_CleanupIsDoneAfterLastIngesterReturns(t *testing.T) {
+	// We want to decrement inflight requests and other counters that we use for limits
+	// only after the last ingester has returned.
+	// Distributor.Push and Distributor.PushWithCleanup return after a quorum of ingesters have returned.
+	// But there are still resources occupied within the distributor while it's
+	// waiting for all ingesters to return. So we want the instance limits to accurately reflect that.
+
+	distributors, ingesters, _ := prepare(t, prepConfig{
+		numIngesters:        3,
+		happyIngesters:      3,
+		numDistributors:     1,
+		maxInflightRequests: 1,
+		replicationFactor:   3,
+		enableTracker:       false,
+	})
+	ingesters[2].responseDelay = time.Minute // give the test enough time to do assertions
+
+	lbls := labels.Labels{
+		{Name: "__name__", Value: "metric_1"},
+		{Name: "key", Value: "value_1"},
+	}
+	ctx := user.InjectOrgID(context.Background(), "user")
+
+	_, err := distributors[0].Push(ctx, mockWriteRequest(lbls, 1, 1))
+	assert.NoError(t, err)
+
+	// First push request returned, but there's still an ingester call inflight.
+	// This means that the push request is counted as inflight, so another incoming request should be rejected.
+	_, err = distributors[0].Push(ctx, mockWriteRequest(nil, 1, 1))
+	assert.ErrorIs(t, err, errMaxInflightRequestsReached)
 }
