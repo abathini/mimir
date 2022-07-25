@@ -245,6 +245,9 @@ replace github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-
 // Using a fork of Prometheus while we work on querysharding to avoid a dependency on the upstream.
 replace github.com/prometheus/prometheus => github.com/grafana/mimir-prometheus v0.0.0-20220720102702-2836e5513f1b
 
+// To refresh aws credentials before expiry
+github.com/minio/minio-go/v7 => github.com/anuj-anurag-sharma/minio-go/v7 v7.0.11-0.20211020082505-54d7b17a1358
+
 // Out of order Support forces us to fork thanos because we've changed the ChunkReader interface.
 // Once the out of order support is upstreamed and Thanos has vendored it, we can remove this override.
 replace github.com/thanos-io/thanos => github.com/grafana/thanos v0.19.1-0.20220713162227-7bde03e4afa9
